@@ -1,8 +1,8 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-using System.Linq;
 using System;
+using System.Linq;
 
 /// <summary>
 /// an edge connects 2 vertices
@@ -36,25 +36,6 @@ public class Edge:IComparable<Edge>{
 	/// </summary>
 	public float GetTangent(){
 		return (v2.y - v1.y) / (v2.x - v1.x);
-	}
-
-	/// <summary>
-	/// Compares whether a line is above or below a vertex
-	/// </summary>
-	public int CompareTo(Vector2 v){
-		// find equation of edge
-		float tan = GetTangent();
-		float b = v1.y - tan * v1.x;
-
-		// input vertex' x end check for y
-		float delta = v.y -(v.x * tan + b);
-
-		if (delta < 0.0)
-			return 1;
-		else if (delta > 0)
-			return -1;
-		else
-			return 0;
 	}
 
 	/// <summary>
@@ -107,45 +88,13 @@ public class Edge:IComparable<Edge>{
 }
 
 /// <summary>
-/// helper comparator static class
-/// </summary>
-public static class Comparator{
-	public static int Compare2(Edge e1, Edge e2){
-		// find common x1 and x2
-		float x1 = Mathf.Max(e1.v1.x,e2.v1.x);
-		float x2 = Mathf.Min(e1.v2.x,e2.v2.x);
-		if (x1 < x2) { // there are common area along x between e1 and e2
-			// find equation of e1
-			float tan1 = e1.GetTangent();
-			float b1 = e1.v1.y - tan1 * e1.v1.x;
-
-			// find equation of e2
-			float tan2 = e2.GetTangent();
-			float b2 = e2.v1.y - tan2 * e2.v1.x;
-
-			// find y1 for both edge
-			float y1e1 = tan1 * x1 + b1;
-			float y1e2 = tan2 * x1 + b2;
-
-			if (Mathf.Approximately (y1e1, y1e2)) { // left corner case
-				// compute for y2
-				float y2e1 = tan1 * x2 + b1;
-				float y2e2 = tan2 * x2 + b2;
-				return y2e2.CompareTo (y2e1);
-			} else {
-				return y1e2.CompareTo (y1e1);
-			}
-		} else { // there are no common area along x between e1 and e2
-			return 0;
-		}
-	}
-}
-
-/// <summary>
 /// container for active edges list, utilize binary search function of list
 /// specifically for when inserting
 /// </summary>
 public class ActiveEdgesList{
+	/// <summary>
+	/// internal edge list
+	/// </summary>
 	private List<Edge> _edgeList;
 	public List<Edge> EdgeList{
 		get{
@@ -155,6 +104,9 @@ public class ActiveEdgesList{
 		}
 	}
 
+	/// <summary>
+	/// return edge count
+	/// </summary>
 	public int Count{
 		get{
 			return EdgeList.Count;
@@ -206,35 +158,60 @@ public class ActiveEdgesList{
 }
 
 public class Polygon : MonoBehaviour {
-	private void CreateTriangles(ActiveEdgesList edgeList, float currentScan, float prevScan){
-		List<Vector2> prevIntersections = new List<Vector2> ();
-		List<Vector2> currentIntersections = new List<Vector2> ();
-
-		for (int i = 0; i < edgeList.Count; i++) {
-			Edge edge = edgeList.GetEdgeAtIndex (i);
-			prevIntersections.Add (edge.GetIntersectionWith (prevScan));
-			currentIntersections.Add (edge.GetIntersectionWith (currentScan));
-		}
-
-		for (int i = 0; i < currentIntersections.Count; i = i + 2) {
-			Gizmos.color = Color.cyan;
-			Gizmos.DrawLine (prevIntersections[i], currentIntersections[i]);
-			Gizmos.DrawLine (currentIntersections[i], currentIntersections[i+1]);
-			Gizmos.DrawLine (currentIntersections[i+1], prevIntersections[i+1]);
-			Gizmos.DrawLine (prevIntersections[i+1], currentIntersections[i]);
-			Gizmos.DrawLine (prevIntersections[i+1], prevIntersections[i]);
+	/// <summary>
+	/// the result subdivisions
+	/// </summary>
+	private List<List<Vector2>> _subdivisions;
+	public List<List<Vector2>> Subdivisions{
+		get{
+			if (_subdivisions == null)
+				_subdivisions = new List<List<Vector2>> ();
+			return _subdivisions;
 		}
 	}
 
 	private void OnDrawGizmos(){			
+		ComputeSubdivisions ();
+		foreach (var division in Subdivisions)
+			DrawDivision (division);
+	}
+		
+	public void OnValidate(){
+		// make sure there's no vertical line, if there's any, shift it a tiny bit
+		List<float> occupiedX = new List<float> ();
+		for (int i = 0; i < transform.childCount; i++) {
+			Transform child = transform.GetChild (GetCircularIndex (i));
+			while (occupiedX.Any(item => Mathf.Approximately(item,child.position.x))) {
+				Vector3 temp = child.position;
+				child.position = new Vector3 (temp.x + 0.00001f, temp.y, temp.z);
+			}
+			occupiedX.Add (child.position.x);
+		}
+	}
+
+	/// <summary>
+	/// Draws the division from a list of vertices
+	/// </summary>
+	private void DrawDivision(List<Vector2> division){
+		Gizmos.color = Color.cyan;
+		Gizmos.DrawLine (division[0], division[1]);
+		Gizmos.DrawLine (division[1], division[2]);
+		Gizmos.DrawLine (division[2], division[3]);
+		Gizmos.DrawLine (division[3], division[1]);
+		Gizmos.DrawLine (division[3], division[0]);
+	}
+
+	/// <summary>
+	/// Computes the subdivisions of the polygon
+	/// </summary>
+	public void ComputeSubdivisions(){
+		OnValidate ();
+
+		// clear subdivisions, we'll start from scratch
+		Subdivisions.Clear ();
+
 		if (transform.childCount <= 2) // need at least 3 vertices
 			return; 
-
-		// default draw
-		for (int i = 0; i < transform.childCount; i++) {
-			Gizmos.color = Color.yellow;
-			Gizmos.DrawLine(transform.GetChild(GetCircularIndex (i)).position, transform.GetChild(GetCircularIndex(i+1)).position);
-		}
 
 		// form dictionary transform -> index (for easy access of neighboring edges)
 		Dictionary<Transform,int> transformIndexMap = new Dictionary<Transform, int>();
@@ -249,12 +226,12 @@ public class Polygon : MonoBehaviour {
 
 		// construct active list of scanned edges
 		ActiveEdgesList edgeList = new ActiveEdgesList ();
-		List<Edge> activeEdges = new List<Edge> ();
 
-		int test = 0;
 		// scan the polygon
 		float prevScanline = 0;
-		foreach (var child in childs) {
+		for(int i = 0; i < childs.Count; i++){
+			Transform child = childs[i];
+
 			// get index of transform in the list
 			int index;
 			if(transformIndexMap.TryGetValue(child,out index)){
@@ -267,169 +244,72 @@ public class Polygon : MonoBehaviour {
 
 				// construct the edges that intersects with current vertex
 				Edge e1 = new Edge(child.position,next.position);
-				Edge e2 = new Edge (child.position, previous.position);
-
-				// swap e2 and e1 if e2 is above e1 for easier processing later
-				if (e1.CompareTo (e2) > 0) {
-					Vector3 temp = e2.v1;
-					e2.v1 = e1.v1;
-					e1.v1 = temp;
-
-					temp = e2.v2;
-					e2.v2 = e1.v2;
-					e1.v2 = temp;
-				}
-					
+				Edge e2 = new Edge (child.position, previous.position);					
 
 				// check condition of the two edges and determine condition of current vertex
 				if (!e1.IsBehind (scanline) && !e2.IsBehind (scanline)) { 
-					Gizmos.color = Color.green;
-					Gizmos.DrawSphere (child.position, 0.3f);
-
-					if(test > 0){
-						CreateTriangles (edgeList, scanline, prevScanline);
-					}
+					if (i > 0)
+						CreateSubdivisions (edgeList, scanline, prevScanline);
+						//CreateTriangles (edgeList, scanline, prevScanline);
 
 					edgeList.Insert (e1);
 					edgeList.Insert (e2);
-
-					int ie1 = edgeList.GetIndexOf (e1);
-					int ie2 = edgeList.GetIndexOf (e2);
-
-					// we know that ie1 is > ie2, we'll go from ie1 looking up and from ie2 loking down
-					if (ie1 % 2 > 0) { // only draw line if there's at least an odd number of active edge above this vertex
-						Edge closestAbove = edgeList.GetEdgeAtIndex(ie1 - 1);
-						Vector2 intersection = closestAbove.GetIntersectionWith (scanline);
-						Gizmos.color = Color.blue;
-						Gizmos.DrawSphere (intersection, 0.3f);
-						Gizmos.DrawLine (intersection, child.position);
-					}
-
-					if ((edgeList.Count - 1 - ie2) % 2 > 0) { // only draw line if there's at least an odd number of active edge below this vertex
-						Edge closestBelow = edgeList.GetEdgeAtIndex(ie2 + 1);
-						Vector2 intersection = closestBelow.GetIntersectionWith (scanline);
-						Gizmos.color = Color.blue;
-						Gizmos.DrawSphere (intersection, 0.3f);
-						Gizmos.DrawLine (intersection, child.position);
-					}
-				
-					activeEdges.Add (e1);
-					activeEdges.Add (e2);
 				} else if (e1.IsBehind (scanline) && e2.IsBehind (scanline)) {
-					Gizmos.color = Color.red;
-					Gizmos.DrawSphere (child.position, 0.3f);
-
-					if(test > 0){
-						CreateTriangles (edgeList, scanline, prevScanline);
-					}
-
-					// draw first as we're going to remove these edges from the active list
-					int ie1 = edgeList.GetIndexOf (e1);
-					int ie2 = edgeList.GetIndexOf (e2);
-
-					// we know that ie1 is > ie2, we'll go from ie1 looking up and from ie2 loking down
-					if (ie1 % 2 > 0) { // only draw line if there's at least an odd number of active edge above this vertex
-						Edge closestAbove = edgeList.GetEdgeAtIndex(ie1 - 1);
-						Vector2 intersection = closestAbove.GetIntersectionWith (scanline);
-						Gizmos.color = Color.blue;
-						Gizmos.DrawSphere (intersection, 0.3f);
-						Gizmos.DrawLine (intersection, child.position);
-					}
-
-					if ((edgeList.Count - 1 - ie2) % 2 > 0) { // only draw line if there's at least an odd number of active edge below this vertex
-						Edge closestBelow = edgeList.GetEdgeAtIndex(ie2 + 1);
-						Vector2 intersection = closestBelow.GetIntersectionWith (scanline);
-						Gizmos.color = Color.blue;
-						Gizmos.DrawSphere (intersection, 0.3f);
-						Gizmos.DrawLine (intersection, child.position);
-					}
+					if(i > 0)
+						CreateSubdivisions (edgeList, scanline, prevScanline);
+						//CreateTriangles (edgeList, scanline, prevScanline);
 
 					edgeList.Remove (e1);
 					edgeList.Remove (e2);
-
-					activeEdges.RemoveAt (activeEdges.FindIndex (e => e.v1 == e1.v1 && e.v2 == e1.v2));
-					activeEdges.RemoveAt (activeEdges.FindIndex (e => e.v1 == e2.v1 && e.v2 == e2.v2));
 				} else {
-					Gizmos.color = Color.white;
-					Gizmos.DrawSphere (child.position, 0.3f);
-
-					if(test > 0){
-						CreateTriangles (edgeList, scanline, prevScanline);
-					}
+					if(i > 0)
+						CreateSubdivisions (edgeList, scanline, prevScanline);
+						//CreateTriangles (edgeList, scanline, prevScanline);
 
 					if (e1.IsBehind (scanline)) {
 						edgeList.Remove (e1);
 						edgeList.Insert (e2);
-
-						// we only have 1 edge to look above and below now
-						int ie2 = edgeList.GetIndexOf (e2);
-
-						if (ie2 % 2 > 0) { // only draw line if there's at least an odd number of active edge above this vertex
-							Edge closestAbove = edgeList.GetEdgeAtIndex(ie2 - 1);
-							Vector2 intersection = closestAbove.GetIntersectionWith (scanline);
-							Gizmos.color = Color.blue;
-							Gizmos.DrawSphere (intersection, 0.3f);
-							Gizmos.DrawLine (intersection, child.position);
-						}
-
-						if ((edgeList.Count - 1 - ie2) % 2 > 0) { // only draw line if there's at least an odd number of active edge below this vertex
-							Edge closestBelow = edgeList.GetEdgeAtIndex(ie2 + 1);
-							Vector2 intersection = closestBelow.GetIntersectionWith (scanline);
-							Gizmos.color = Color.blue;
-							Gizmos.DrawSphere (intersection, 0.3f);
-							Gizmos.DrawLine (intersection, child.position);
-						}
-
-						activeEdges.RemoveAt (activeEdges.FindIndex (e => e.v1 == e1.v1 && e.v2 == e1.v2));
-						activeEdges.Add (e2);
 					} else {
 						edgeList.Remove (e2);
 						edgeList.Insert (e1);
-
-						// we only have 1 edge to look above and below now
-						int ie1 = edgeList.GetIndexOf (e1);
-
-						if (ie1 % 2 > 0) { // only draw line if there's at least an odd number of active edge above this vertex
-							Edge closestAbove = edgeList.GetEdgeAtIndex(ie1 - 1);
-							Vector2 intersection = closestAbove.GetIntersectionWith (scanline);
-							Gizmos.color = Color.blue;
-							Gizmos.DrawSphere (intersection, 0.3f);
-							Gizmos.DrawLine (intersection, child.position);
-						}
-
-						if ((edgeList.Count - 1 - ie1) % 2 > 0) { // only draw line if there's at least an odd number of active edge below this vertex
-							Edge closestBelow = edgeList.GetEdgeAtIndex(ie1 + 1);
-							Vector2 intersection = closestBelow.GetIntersectionWith (scanline);
-							Gizmos.color = Color.blue;
-							Gizmos.DrawSphere (intersection, 0.3f);
-							Gizmos.DrawLine (intersection, child.position);
-						}
-
-						activeEdges.RemoveAt (activeEdges.FindIndex (e => e.v1 == e2.v1 && e.v2 == e2.v2));
-						activeEdges.Add (e1);
 					}
 				}
-
-				activeEdges.Sort ((a,b)=>Comparator.Compare2 (a,b));
-
-				// debug
-				if (test == 1) {
-					
-				}
-				test++;
 				prevScanline = scanline;
-				// end debug
 			}
 		}
 	}
 
 	/// <summary>
-	/// helper function to sweep along index of child as a circular loop
+	/// helper function to loop along index of child 
 	/// </summary>
 	public int GetCircularIndex(int index){
 		while (index < 0)
 			index += transform.childCount;
 		return index % transform.childCount;
+	}
+
+	/// <summary>
+	/// Creates subdivisions from a set of edge list and 2 scanline positions
+	/// </summary>
+	public void CreateSubdivisions(ActiveEdgesList edgeList, float currentScan, float prevScan){
+		// prepare the list of intersections
+		List<Vector2> prevIntersections = new List<Vector2> ();
+		List<Vector2> currentIntersections = new List<Vector2> ();
+		for (int i = 0; i < edgeList.Count; i++) {
+			Edge edge = edgeList.GetEdgeAtIndex (i);
+			prevIntersections.Add (edge.GetIntersectionWith (prevScan));
+			currentIntersections.Add (edge.GetIntersectionWith (currentScan));
+		}
+
+		// add subdivisions to the list
+		for (int i = 0; i < currentIntersections.Count; i = i + 2) {
+				List<Vector2> newDivision = new List<Vector2> ();
+				newDivision.Add (prevIntersections [i]);
+				newDivision.Add (currentIntersections [i]);
+				newDivision.Add (currentIntersections [i + 1]);
+				newDivision.Add (prevIntersections [i + 1]);
+				Subdivisions.Add (newDivision);
+		}
 	}
 }
 
