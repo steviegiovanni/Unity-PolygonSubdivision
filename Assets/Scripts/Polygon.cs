@@ -159,6 +159,16 @@ public class ActiveEdgesList{
 
 public class Polygon : MonoBehaviour {
 	/// <summary>
+	/// whether we want to subdivide or not
+	/// </summary>
+	[SerializeField]
+	private bool _subdivide = true;
+	public bool Subdivide{
+		get{ return _subdivide;}
+		set{ _subdivide = value;}
+	}
+
+	/// <summary>
 	/// the result subdivisions
 	/// </summary>
 	private List<List<Vector2>> _subdivisions;
@@ -170,10 +180,17 @@ public class Polygon : MonoBehaviour {
 		}
 	}
 
-	private void OnDrawGizmos(){			
-		ComputeSubdivisions ();
-		foreach (var division in Subdivisions)
-			DrawDivision (division);
+	private void OnDrawGizmos(){
+		if (Subdivide) {
+			ComputeSubdivisions ();
+			foreach (var division in Subdivisions)
+				DrawDivision (division);
+		} else {
+			for (int i = 0; i < transform.childCount; i++) {
+				Gizmos.color = Color.yellow;
+				Gizmos.DrawLine (transform.GetChild (GetCircularIndex (i)).position, transform.GetChild (GetCircularIndex (i + 1)).position);
+			}
+		}
 	}
 		
 	public void OnValidate(){
