@@ -15,7 +15,7 @@ public class Edge:IComparable<Edge>{
 	/// constructor. we make sure that v1 is always on the left of v2;
 	/// </summary>
 	public Edge(Vector2 v1,Vector2 v2){
-		if (Comparator.CompareX(v1,v2) > 0) {
+		if (v1.x.CompareTo(v2.x) > 0) {
 			this.v1 = v2;
 			this.v2 = v1;
 		} else {
@@ -70,7 +70,7 @@ public class Edge:IComparable<Edge>{
 	#region IComparable implementation
 
 	/// <summary>
-	/// compares an edge with another edge
+	/// compares an edge with another edge (which one is above)
 	/// </summary>
 	public int CompareTo (Edge e)
 	{
@@ -110,10 +110,6 @@ public class Edge:IComparable<Edge>{
 /// helper comparator static class
 /// </summary>
 public static class Comparator{
-	public static int CompareX(Vector2 v1, Vector2 v2){
-		return v1.x.CompareTo(v2.x);
-	}
-
 	public static int Compare2(Edge e1, Edge e2){
 		// find common x1 and x2
 		float x1 = Mathf.Max(e1.v1.x,e2.v1.x);
@@ -210,6 +206,26 @@ public class ActiveEdgesList{
 }
 
 public class Polygon : MonoBehaviour {
+	private void CreateTriangles(ActiveEdgesList edgeList, float currentScan, float prevScan){
+		List<Vector2> prevIntersections = new List<Vector2> ();
+		List<Vector2> currentIntersections = new List<Vector2> ();
+
+		for (int i = 0; i < edgeList.Count; i++) {
+			Edge edge = edgeList.GetEdgeAtIndex (i);
+			prevIntersections.Add (edge.GetIntersectionWith (prevScan));
+			currentIntersections.Add (edge.GetIntersectionWith (currentScan));
+		}
+
+		for (int i = 0; i < currentIntersections.Count; i = i + 2) {
+			Gizmos.color = Color.cyan;
+			Gizmos.DrawLine (prevIntersections[i], currentIntersections[i]);
+			Gizmos.DrawLine (currentIntersections[i], currentIntersections[i+1]);
+			Gizmos.DrawLine (currentIntersections[i+1], prevIntersections[i+1]);
+			Gizmos.DrawLine (prevIntersections[i+1], currentIntersections[i]);
+			Gizmos.DrawLine (prevIntersections[i+1], prevIntersections[i]);
+		}
+	}
+
 	private void OnDrawGizmos(){			
 		if (transform.childCount <= 2) // need at least 3 vertices
 			return; 
@@ -229,7 +245,7 @@ public class Polygon : MonoBehaviour {
 		List<Transform> childs = new List<Transform>();
 		for (int i = 0; i < transform.childCount; i++)
 			childs.Add (transform.GetChild (i));
-		childs.Sort ((a, b) => Comparator.CompareX (a.position, b.position));
+		childs.Sort ((a, b) => a.position.x.CompareTo(b.position.x));
 
 		// construct active list of scanned edges
 		ActiveEdgesList edgeList = new ActiveEdgesList ();
@@ -237,6 +253,7 @@ public class Polygon : MonoBehaviour {
 
 		int test = 0;
 		// scan the polygon
+		float prevScanline = 0;
 		foreach (var child in childs) {
 			// get index of transform in the list
 			int index;
@@ -267,32 +284,17 @@ public class Polygon : MonoBehaviour {
 				// check condition of the two edges and determine condition of current vertex
 				if (!e1.IsBehind (scanline) && !e2.IsBehind (scanline)) { 
 					Gizmos.color = Color.green;
-					Gizmos.DrawSphere (child.position, 0.2f);
+					Gizmos.DrawSphere (child.position, 0.3f);
+
+					if(test > 0){
+						CreateTriangles (edgeList, scanline, prevScanline);
+					}
 
 					edgeList.Insert (e1);
 					edgeList.Insert (e2);
 
 					int ie1 = edgeList.GetIndexOf (e1);
 					int ie2 = edgeList.GetIndexOf (e2);
-
-					/*if (test == 3) {
-						Debug.Log ("number of active edges: " + edgeList.Count);
-						Edge edge0 = edgeList.GetEdgeAtIndex (0);
-						Gizmos.color = Color.magenta;
-						Gizmos.DrawLine (edge0.v1, edge0.v2);
-						Edge edge1 = edgeList.GetEdgeAtIndex (1);
-						Gizmos.color = Color.white;
-						Gizmos.DrawLine (edge1.v1, edge1.v2);
-						Edge edge2 = edgeList.GetEdgeAtIndex (2);
-						Gizmos.color = Color.cyan;
-						Gizmos.DrawLine (edge2.v1, edge2.v2);
-						Edge edge3 = edgeList.GetEdgeAtIndex (3);
-						Gizmos.color = Color.gray;
-						Gizmos.DrawLine (edge3.v1, edge3.v2);
-					}
-
-					if (test == 3)
-						Debug.Log ("ie1: "+ie1);*/
 
 					// we know that ie1 is > ie2, we'll go from ie1 looking up and from ie2 loking down
 					if (ie1 % 2 > 0) { // only draw line if there's at least an odd number of active edge above this vertex
@@ -314,8 +316,12 @@ public class Polygon : MonoBehaviour {
 					activeEdges.Add (e1);
 					activeEdges.Add (e2);
 				} else if (e1.IsBehind (scanline) && e2.IsBehind (scanline)) {
-					//Gizmos.color = Color.red;
-					//Gizmos.DrawSphere (child.position, 0.2f);
+					Gizmos.color = Color.red;
+					Gizmos.DrawSphere (child.position, 0.3f);
+
+					if(test > 0){
+						CreateTriangles (edgeList, scanline, prevScanline);
+					}
 
 					// draw first as we're going to remove these edges from the active list
 					int ie1 = edgeList.GetIndexOf (e1);
@@ -344,8 +350,12 @@ public class Polygon : MonoBehaviour {
 					activeEdges.RemoveAt (activeEdges.FindIndex (e => e.v1 == e1.v1 && e.v2 == e1.v2));
 					activeEdges.RemoveAt (activeEdges.FindIndex (e => e.v1 == e2.v1 && e.v2 == e2.v2));
 				} else {
-					//Gizmos.color = Color.white;
-					//Gizmos.DrawSphere (child.position, 0.2f);
+					Gizmos.color = Color.white;
+					Gizmos.DrawSphere (child.position, 0.3f);
+
+					if(test > 0){
+						CreateTriangles (edgeList, scanline, prevScanline);
+					}
 
 					if (e1.IsBehind (scanline)) {
 						edgeList.Remove (e1);
@@ -407,99 +417,8 @@ public class Polygon : MonoBehaviour {
 					
 				}
 				test++;
+				prevScanline = scanline;
 				// end debug
-
-				// try to find e1 and e2 again in the sorted list
-				/*int ie1 = activeEdges.FindIndex(e => e.v1 == e1.v1 && e.v2 == e1.v2);
-				int ie2 = activeEdges.FindIndex(e => e.v1 == e2.v1 && e.v2 == e2.v2);
-				if (!(ie1 < 0) || !(ie2 < 0)) {
-					if (ie1 < 0) {
-						if (ie2 > 0) {
-							Edge closestAbove = activeEdges [ie2 - 1];
-							Vector2 intersection = closestAbove.GetIntersectionWith (scanline);
-							Gizmos.color = Color.blue;
-							Gizmos.DrawSphere (intersection, 0.3f);
-							Gizmos.DrawLine (intersection, child.position);
-						}
-
-						if (ie2 < (activeEdges.Count - 1)) {
-							Edge closestBelow = activeEdges [ie2 + 1];
-							Vector2 intersection = closestBelow.GetIntersectionWith (scanline);
-							Gizmos.color = Color.blue;
-							Gizmos.DrawSphere (intersection, 0.3f);
-							Gizmos.DrawLine (intersection, child.position);
-						}
-					} else if (ie2 < 0) {
-						if (ie1 > 0) {
-							Edge closestAbove = activeEdges [ie1 - 1];
-							Vector2 intersection = closestAbove.GetIntersectionWith (scanline);
-							Gizmos.color = Color.blue;
-							Gizmos.DrawSphere (intersection, 0.3f);
-							Gizmos.DrawLine (intersection, child.position);
-						}
-
-						if (ie1 < (activeEdges.Count - 1)) {
-							Edge closestBelow = activeEdges [ie1 + 1];
-							Vector2 intersection = closestBelow.GetIntersectionWith (scanline);
-							Gizmos.color = Color.blue;
-							Gizmos.DrawSphere (intersection, 0.3f);
-							Gizmos.DrawLine (intersection, child.position);
-						}
-					} else {
-						if (ie1 > ie2) {
-							int temp = ie1;
-							ie1 = ie2;
-							ie2 = temp;
-						}
-
-						if (ie1 > 0) {
-							Edge closestAbove = activeEdges [ie1 - 1];
-							Vector2 intersection = closestAbove.GetIntersectionWith (scanline);
-							Gizmos.color = Color.blue;
-							Gizmos.DrawSphere (intersection, 0.3f);
-							Gizmos.DrawLine (intersection, child.position);
-						}
-
-						if (ie2 < (activeEdges.Count - 1)) {
-							Edge closestBelow = activeEdges [ie2 + 1];
-							Vector2 intersection = closestBelow.GetIntersectionWith (scanline);
-							Gizmos.color = Color.blue;
-							Gizmos.DrawSphere (intersection, 0.3f);
-							Gizmos.DrawLine (intersection, child.position);
-						}
-					}
-				}*/
-
-				// draw vertical line to above
-				/*int activeEdgeIndex = 0;
-				Edge closestAbove = null;
-				while ((activeEdgeIndex < edgeList.Count) && (edgeList.GetEdgeAtIndex (activeEdgeIndex).CompareTo(child.position) == -1)) {
-					closestAbove = edgeList.GetEdgeAtIndex (activeEdgeIndex);
-					activeEdgeIndex++;
-				}
-				if (closestAbove != null) {
-					Vector2 intersection = closestAbove.GetIntersectionWith (scanline);
-
-					Gizmos.color = Color.blue;
-					Gizmos.DrawSphere (intersection, 0.2f);
-					Gizmos.DrawLine (intersection, child.position);
-				}*/
-
-				// draw vertical line to below
-				/*activeEdgeIndex = edgeList.Count - 1;
-				Edge closestBelow = null;
-				while ((activeEdgeIndex >= 0) && edgeList.GetEdgeAtIndex (activeEdgeIndex).CompareTo (child.position) == 1) {
-					closestBelow = edgeList.GetEdgeAtIndex (activeEdgeIndex);
-					activeEdgeIndex--;
-				}
-				if (closestBelow != null) {
-					Vector2 intersection = closestBelow.GetIntersectionWith (scanline);
-					Gizmos.color = Color.blue;
-
-					Gizmos.DrawSphere (intersection, 0.2f);
-					Gizmos.DrawLine (intersection, child.position);
-				}*/
-
 			}
 		}
 	}
